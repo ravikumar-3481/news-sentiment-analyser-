@@ -8,47 +8,58 @@ import plotly.graph_objects as go
 from datetime import datetime
 from collections import Counter
 import re
+from urllib.parse import urljoin
 
 # --- CONFIGURATION ---
 st.set_page_config(
     page_title="NewsPulse AI | Advanced Sentiment Engine",
     page_icon="📡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
+
+# --- STATE MANAGEMENT ---
+if 'selected_article' not in st.session_state:
+    st.session_state.selected_article = None
+if 'scraped_data' not in st.session_state:
+    st.session_state.scraped_data = None
 
 # --- STYLING ---
 st.markdown("""
     <style>
-    .main {
-        background-color: #f4f7f9;
-    }
+    .main { background-color: #f8fafc; }
+    h1, h2, h3 { color: #0f172a; }
     .stButton>button {
         width: 100%;
         border-radius: 8px;
-        height: 3.5em;
+        height: 3em;
         background-color: #1E3A8A;
         color: white;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        background-color: #3b82f6;
+        font-weight: 600;
+        transition: 0.3s ease-in-out;
         border: none;
     }
+    .stButton>button:hover { background-color: #3b82f6; transform: translateY(-2px); }
     .metric-card {
-        background-color: white;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        text-align: center;
+        background-color: white; padding: 20px;
+        border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        text-align: center; border-top: 4px solid #3b82f6;
     }
     .dev-card {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        color: white;
-        padding: 25px;
-        border-radius: 15px;
-        margin-top: 20px;
+        background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+        color: white; padding: 30px; border-radius: 16px;
+        box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+    }
+    .dev-card h2 { color: #38bdf8; margin-top: 0; }
+    .headline-card {
+        background: white; padding: 15px; border-radius: 8px;
+        border-left: 5px solid #1e3a8a; margin-bottom: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .article-text {
+        font-size: 1.1em; line-height: 1.8; color: #334155;
+        background: white; padding: 30px; border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -60,205 +71,319 @@ def get_sentiment(text):
     polarity = analysis.sentiment.polarity
     subjectivity = analysis.sentiment.subjectivity
     
-    if polarity > 0.1:
-        label = "Positive"
-    elif polarity < -0.1:
-        label = "Negative"
-    else:
-        label = "Neutral"
+    if polarity > 0.1: label, emoji = "Positive", "🟢"
+    elif polarity < -0.1: label, emoji = "Negative", "🔴"
+    else: label, emoji = "Neutral", "⚪"
     
-    return label, round(polarity, 2), round(subjectivity, 2)
+    return label, emoji, round(polarity, 2), round(subjectivity, 2)
 
 def extract_keywords(text_list):
     """Simple keyword extraction by frequency."""
     words = []
-    stopwords = set(['the', 'and', 'for', 'that', 'with', 'from', 'this', 'news', 'says', 'how', 'why', 'what'])
+    stopwords = set(['the', 'and', 'for', 'that', 'with', 'from', 'this', 'news', 'says', 'how', 'why', 'what', 'will', 'over', 'into', 'after', 'about'])
     for text in text_list:
         clean = re.sub(r'[^\w\s]', '', text.lower())
         words.extend([w for w in clean.split() if w not in stopwords and len(w) > 3])
-    return Counter(words).most_common(10)
+    return Counter(words).most_common(12)
 
+@st.cache_data(ttl=300)
 def scrape_news(url):
-    """Scrapes headlines from common news structures."""
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
+    """Scrapes headlines and links from common news structures."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0'}
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        found_headlines = []
-        # Targeting common headline wrappers
-        for tag in soup.find_all(['h1', 'h2', 'h3', 'h4']):
-            text = tag.get_text().strip()
-            if len(text.split()) > 4 and len(text) < 200: 
-                found_headlines.append(text)
+        found_data = []
+        seen_headlines = set()
         
-        return list(dict.fromkeys(found_headlines)) # Preserve order while removing duplicates
+        for tag in soup.find_all(['h1', 'h2', 'h3', 'h4']):
+            a_tag = tag.find('a')
+            if a_tag and a_tag.get('href'):
+                text = tag.get_text().strip()
+                link = urljoin(url, a_tag.get('href')) # Resolve relative URLs
+                
+                if len(text.split()) > 4 and len(text) < 200 and text not in seen_headlines:
+                    seen_headlines.add(text)
+                    found_data.append({"Headline": text, "URL": link})
+        
+        return found_data
     except Exception as e:
         return f"Error: {str(e)}"
 
+@st.cache_data(ttl=300)
+def scrape_article_content(url):
+    """Attempts to extract the main image and text from an article URL."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Try to find OG Image
+        img_tag = soup.find('meta', property='og:image')
+        img_url = img_tag['content'] if img_tag else None
+        
+        # Try to extract paragraphs
+        paragraphs = soup.find_all('p')
+        content = "\n\n".join([p.get_text().strip() for p in paragraphs if len(p.get_text().strip()) > 50])
+        
+        if not content:
+            content = "Could not extract full article text automatically due to website paywalls or javascript rendering."
+            
+        return img_url, content
+    except Exception as e:
+        return None, f"Could not load article content. Error: {str(e)}"
+
 # --- NAVIGATION ---
 st.markdown("<h1 style='text-align: center; color: #1E3A8A; margin-bottom: 0;'>NewsPulse AI 📡</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #64748b;'>Intelligence for the Modern Information Age</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #64748b; font-size: 1.2em;'>Intelligence for the Modern Information Age</p>", unsafe_allow_html=True)
 
-selected_page = st.segmented_control(
-    label="Navigation",
-    options=["🏠 Home", "📊 Dashboard", "ℹ️ About"],
-    default="🏠 Home",
-    label_visibility="collapsed"
-)
+# Using sidebar for simpler navigation state management
+st.sidebar.title("Navigation")
+pages = ["🏠 Home", "📊 Dashboard", "ℹ️ About"]
+selected_page = st.sidebar.radio("Go to:", pages)
 
 st.divider()
 
 # --- PAGE: HOME ---
 if selected_page == "🏠 Home":
-    col1, col2 = st.columns([1.5, 1])
+    st.session_state.selected_article = None # Reset article view
+    
+    col1, col2 = st.columns([1.6, 1])
     
     with col1:
-        st.subheader("🚀 Project Overview")
+        st.header("🚀 Project Overview")
         st.write("""
-        **NewsPulse AI** is a sophisticated Sentiment Analysis engine that utilizes 
-        web-scraping and Natural Language Processing to decode the emotional undertone 
-        of current events. 
-        
-        In today's fast-paced world, market fluctuations and public opinion are often 
-        driven by headlines before they are reflected in hard data. This tool allows users 
-        to quantify that "vibe" instantly.
+        **NewsPulse AI** is an advanced NLP (Natural Language Processing) and web-scraping engine designed to decode the emotional undertone and bias of current events across the globe in real-time.
         """)
         
-        st.subheader("🛠️ Core Features")
-        features = {
-            "Real-Time Scraping": "Extracts live headlines from any major news portal.",
-            "Sentiment Grading": "Classifies text into Positive, Negative, or Neutral clusters.",
-            "Bias Detection": "Measures 'Subjectivity' to distinguish facts from opinions.",
-            "Keyword Analysis": "Identifies recurring themes across dozens of articles."
-        }
-        for f, d in features.items():
-            st.markdown(f"**{f}:** {d}")
+        st.subheader("⚠️ Problem Statement")
+        st.write("""
+        In the modern digital age, we suffer from **Information Overload**. Thousands of news articles are published every minute, often loaded with clickbait, emotional manipulation, and inherent biases. It has become nearly impossible for an individual or investor to manually gauge the true, objective "mood" of the market or public opinion without being influenced by sensationalism.
+        """)
+        
+        st.subheader("💡 The Solution")
+        st.write("""
+        NewsPulse AI solves this by deploying automated scrapers that instantly aggregate headlines from any given news portal. It passes these headlines through a linguistic model to strip away the noise and quantify two critical metrics:
+        1. **Polarity (Sentiment):** Is the news driving fear or optimism?
+        2. **Subjectivity (Bias):** Is the news reporting hard facts, or pushing an opinion?
+        """)
+        
+        st.subheader("⚙️ Technologies Used")
+        st.markdown("""
+        * **Python:** Core backend programming language.
+        * **Streamlit:** For building the interactive, reactive web application interface.
+        * **BeautifulSoup4 & Requests:** For DOM parsing, HTML extraction, and web scraping.
+        * **TextBlob & NLTK:** For Natural Language Processing and sentiment classification.
+        * **Plotly:** For rendering advanced, interactive SVG-based charts.
+        * **Pandas:** For structuring, cleaning, and managing the scraped datasets.
+        """)
+        
+        st.subheader("🎯 Why is this Unique?")
+        st.write("""
+        Unlike static sentiment reports, NewsPulse AI allows users to input **Custom URLs** and get an on-the-fly analysis. It dynamically adjusts to any news site structure, generates instant interactive data visualizations, and acts as a transparent, bias-detection shield for the reader.
+        """)
+        
+        st.subheader("📖 How to Use")
+        st.info("""
+        1. Navigate to the **📊 Dashboard** from the sidebar.
+        2. Select a pre-configured news category or enter a Custom URL.
+        3. Click **Analyze Now**.
+        4. Explore the charts, or click on any headline to open the **Article Reader** and view the full content.
+        """)
 
     with col2:
         # --- DEVELOPER PROFILE ---
         st.markdown("""
             <div class="dev-card">
-                <h2 style='margin-top:0;'>Developer Profile</h2>
-                <p><strong>Name:</strong> Ravi Kumar Vishwakarma</p>
-                <p><strong>Role:</strong> Full-Stack NLP Engineer</p>
-                <p><strong>Stack:</strong> Python, Streamlit, NLTK, BeautifulSoup</p>
-                <hr style='border-color: rgba(255,255,255,0.2)'>
-                <p style='font-size: 0.9em; font-style: italic;'>
-                    "Passionate about turning unstructured web data into visual stories."
-                </p>
+                <h2>👨‍💻 Developer Profile</h2>
+                <h3 style='color: white; margin-bottom: 5px;'>Ravi Kumar Vishwakarma</h3>
+                <p style='color: #94a3b8; font-size: 1.1em; margin-top: 0;'>Full-Stack NLP Engineer</p>
+                <p>Passionate about turning unstructured web data into visual stories and building AI tools that empower users.</p>
+                <hr style='border-color: rgba(255,255,255,0.2); margin: 20px 0;'>
+                <p style='margin-bottom: 10px;'><strong>Connect with me:</strong></p>
             </div>
         """, unsafe_allow_html=True)
         
-        st.success("✨ **Pro Tip:** Use the Dashboard to track 'AI' sentiment shifts daily!")
+        # Buttons outside HTML for Streamlit click handling
+        st.link_button("📂 View My GitHub", "https://github.com/", use_container_width=True)
+        st.link_button("💼 Connect on LinkedIn", "https://linkedin.com/", use_container_width=True)
+        st.link_button("🌐 Visit Portfolio Website", "https://yourportfolio.com/", use_container_width=True)
 
 # --- PAGE: DASHBOARD ---
 elif selected_page == "📊 Dashboard":
-    st.subheader("Data Extraction & Analysis")
     
-    # URL Selection
-    target_topic = st.selectbox(
-        "Select News Source:",
-        ["https://techcrunch.com/category/artificial-intelligence/", 
-         "https://www.theverge.com/tech",
-         "https://www.bbc.com/news/business",
-         "Custom URL"]
-    )
-    
-    url_to_use = target_topic
-    if target_topic == "Custom URL":
-        url_to_use = st.text_input("Enter Custom URL:", placeholder = "Enter News Website Url")
-    
-    if st.button("🚀 Analyze Now"):
-        headlines = scrape_news(url_to_use)
+    # If an article is selected, show the Article Reader view
+    if st.session_state.selected_article:
+        st.button("← Back to Dashboard", on_click=lambda: st.session_state.update({'selected_article': None}))
+        st.divider()
         
-        if isinstance(headlines, str) and headlines.startswith("Error"):
-            st.error(headlines)
-        elif not headlines:
-            st.warning("No headlines found. This site may have anti-scraping blocks.")
-        else:
-            # Processing
-            data = []
-            for h in headlines:
-                label, pol, subj = get_sentiment(h)
-                data.append({
-                    "Headline": h, 
-                    "Sentiment": label, 
-                    "Polarity": pol, 
-                    "Subjectivity": subj
-                })
+        article_url = st.session_state.selected_article['URL']
+        headline = st.session_state.selected_article['Headline']
+        sentiment = st.session_state.selected_article['Sentiment']
+        
+        st.markdown(f"<h2>{headline}</h2>", unsafe_allow_html=True)
+        st.markdown(f"**Source URL:** [{article_url}]({article_url}) | **Sentiment:** {sentiment}")
+        
+        with st.spinner("Extracting article content..."):
+            img_url, content = scrape_article_content(article_url)
             
-            df = pd.DataFrame(data)
+            if img_url:
+                st.image(img_url, use_container_width=True)
             
-            # HIGHLIGHTS SECTION
-            st.markdown("### 📈 Sentiment Highlights")
-            h1, h2, h3, h4 = st.columns(4)
-            avg_pol = df['Polarity'].mean()
-            h1.metric("Headlines Found", len(df))
-            h2.metric("Avg Polarity", f"{avg_pol:.2f}")
-            h3.metric("Positivity Rate", f"{(len(df[df['Sentiment']=='Positive'])/len(df)*100):.1f}%")
-            h4.metric("Subjectivity", f"{df['Subjectivity'].mean():.2f}")
+            st.markdown(f"<div class='article-text'>{content}</div>", unsafe_allow_html=True)
+            
+        st.divider()
+        st.link_button("Open Original Article in New Tab ↗", article_url)
 
-            # VISUALIZATION
-            v1, v2 = st.columns([1, 1])
+    # Otherwise, show the main dashboard
+    else:
+        st.subheader("Data Extraction & Analysis Engine")
+        
+        col_url, col_btn = st.columns([3, 1])
+        with col_url:
+            target_topic = st.selectbox(
+                "Select a News Source or choose 'Custom URL':",
+                ["https://techcrunch.com/category/artificial-intelligence/", 
+                 "https://www.theverge.com/tech",
+                 "https://www.bbc.com/news/business",
+                 "Custom URL"]
+            )
+            
+            url_to_use = target_topic
+            if target_topic == "Custom URL":
+                url_to_use = st.text_input("Enter Custom News URL:", placeholder="e.g., https://news.ycombinator.com/")
+        
+        with col_btn:
+            st.markdown("<br>", unsafe_allow_html=True)
+            analyze_clicked = st.button("🚀 Analyze Now")
+
+        if analyze_clicked:
+            with st.spinner("Initializing web scrapers & NLP models..."):
+                raw_data = scrape_news(url_to_use)
+                
+                if isinstance(raw_data, str) and raw_data.startswith("Error"):
+                    st.error(f"Scraping Failed: {raw_data}")
+                elif not raw_data:
+                    st.warning("No headlines found. This website might have heavy Javascript rendering or anti-scraping protections.")
+                else:
+                    processed_data = []
+                    for item in raw_data:
+                        label, emoji, pol, subj = get_sentiment(item["Headline"])
+                        processed_data.append({
+                            "Headline": item["Headline"],
+                            "URL": item["URL"],
+                            "Sentiment": label,
+                            "Emoji": emoji,
+                            "Polarity": pol,
+                            "Subjectivity": subj
+                        })
+                    
+                    st.session_state.scraped_data = pd.DataFrame(processed_data)
+
+        # Display Dashboard if data exists
+        if st.session_state.scraped_data is not None:
+            df = st.session_state.scraped_data
+            
+            st.markdown("### 📈 Real-Time Intelligence")
+            
+            # --- METRICS ROW ---
+            m1, m2, m3, m4 = st.columns(4)
+            avg_pol = df['Polarity'].mean()
+            pos_rate = (len(df[df['Sentiment']=='Positive'])/len(df)*100) if len(df) > 0 else 0
+            
+            with m1: st.markdown(f"<div class='metric-card'><h3>{len(df)}</h3><p>Headlines Scraped</p></div>", unsafe_allow_html=True)
+            with m2: st.markdown(f"<div class='metric-card'><h3>{avg_pol:.2f}</h3><p>Net Mood Score</p></div>", unsafe_allow_html=True)
+            with m3: st.markdown(f"<div class='metric-card'><h3>{pos_rate:.1f}%</h3><p>Positivity Rate</p></div>", unsafe_allow_html=True)
+            with m4: st.markdown(f"<div class='metric-card'><h3>{df['Subjectivity'].mean():.2f}</h3><p>Avg Bias/Subjectivity</p></div>", unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- VISUALIZATION ROW 1 ---
+            v1, v2 = st.columns(2)
             with v1:
-                fig_pie = px.pie(df, names='Sentiment', title='Market Mood Distribution',
-                                 color='Sentiment', hole=0.5,
+                fig_pie = px.pie(df, names='Sentiment', title='Sentiment Distribution',
+                                 color='Sentiment', hole=0.4,
                                  color_discrete_map={'Positive':'#10b981', 'Neutral':'#94a3b8', 'Negative':'#ef4444'})
+                fig_pie.update_layout(margin=dict(t=40, b=0, l=0, r=0))
                 st.plotly_chart(fig_pie, use_container_width=True)
             
             with v2:
-                # Keyword Bar Chart
-                keywords = extract_keywords(headlines)
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = avg_pol,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Overall Market Mood (-1 to 1)"},
+                    gauge = {
+                        'axis': {'range': [-1, 1]},
+                        'bar': {'color': "#1e3a8a"},
+                        'steps': [
+                            {'range': [-1, -0.1], 'color': "#fca5a5"},
+                            {'range': [-0.1, 0.1], 'color': "#f1f5f9"},
+                            {'range': [0.1, 1], 'color': "#6ee7b7"}]
+                    }))
+                fig_gauge.update_layout(margin=dict(t=40, b=0, l=0, r=0))
+                st.plotly_chart(fig_gauge, use_container_width=True)
+
+            # --- VISUALIZATION ROW 2 ---
+            v3, v4 = st.columns(2)
+            with v3:
+                fig_scatter = px.scatter(df, x='Polarity', y='Subjectivity', color='Sentiment',
+                                         hover_data=['Headline'], title='Bias vs. Sentiment Analysis',
+                                         color_discrete_map={'Positive':'#10b981', 'Neutral':'#94a3b8', 'Negative':'#ef4444'})
+                st.plotly_chart(fig_scatter, use_container_width=True)
+
+            with v4:
+                keywords = extract_keywords(df['Headline'].tolist())
                 k_df = pd.DataFrame(keywords, columns=['Word', 'Count'])
-                fig_key = px.bar(k_df, x='Count', y='Word', orientation='h', title='Trending Topics',
+                fig_key = px.bar(k_df, x='Count', y='Word', orientation='h', title='Trending Keywords',
                                  color_discrete_sequence=['#3b82f6'])
+                fig_key.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_key, use_container_width=True)
 
-            # FULL TABLE - AS REQUESTED
-            st.markdown("### 📋 Complete Scraped Data")
-            # Style the table to be more readable
-            def color_sentiment(val):
-                color = '#10b981' if val == 'Positive' else '#ef4444' if val == 'Negative' else '#94a3b8'
-                return f'color: {color}; font-weight: bold;'
+            # --- INTERACTIVE NEWS FEED ---
+            st.markdown("### 📰 Interactive News Feed")
+            st.write("Click on any article to analyze its content or view the source.")
             
-            styled_df = df.style.applymap(color_sentiment, subset=['Sentiment'])
-            st.table(df) # Using st.table for a fixed view, or st.dataframe for interactive
-
-            # EXTREMES
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.info("⭐ **Most Positive Headline**")
-                best = df.loc[df['Polarity'].idxmax()]['Headline']
-                st.write(f"*{best}*")
-            with col_b:
-                st.error("⚠️ **Most Negative Headline**")
-                worst = df.loc[df['Polarity'].idxmin()]['Headline']
-                st.write(f"*{worst}*")
+            for idx, row in df.iterrows():
+                with st.expander(f"{row['Emoji']} {row['Headline']}"):
+                    st.write(f"**Sentiment Analysis:** Score {row['Polarity']} | **Subjectivity/Bias:** {row['Subjectivity']}")
+                    
+                    c1, c2 = st.columns([1, 4])
+                    with c1:
+                        if st.button("📖 Read Article", key=f"read_{idx}"):
+                            st.session_state.selected_article = row.to_dict()
+                            st.rerun()
 
 # --- PAGE: ABOUT ---
 elif selected_page == "ℹ️ About":
-    st.subheader("Project Documentation")
+    st.session_state.selected_article = None # Reset article view
+    
+    st.header("Project Documentation & Architecture")
+    
     st.write("""
-    ### Technical Specification
-    This application is built using a **Modular Python Architecture**:
+    ### 🧠 How It Works
+    NewsPulse AI is built to replicate the workflow of a data journalist. It performs three critical operations in a matter of seconds:
     
-    1. **Data Layer:** `Requests` and `BeautifulSoup4` handle the DOM parsing.
-    2. **Logic Layer:** `TextBlob` (built on NLTK) provides the pre-trained sentiment models.
-    3. **Presentation Layer:** `Streamlit` provides the reactive UI, while `Plotly` handles the SVG-based charts.
+    1. **Data Acquisition (Scraping):** When a user inputs a URL, the app sends a secure HTTP request pretending to be a web browser. It uses `BeautifulSoup` to parse the website's HTML Document Object Model (DOM), hunting specifically for Headline tags (`<h1>` to `<h4>`) and their associated hyperlinks (`<a>`).
     
-    ### How to Interpret the Scores
-    - **Polarity [-1 to 1]:** 1 is pure joy/success, -1 is pure anger/failure.
-    - **Subjectivity [0 to 1]:** 0 is purely objective (just facts), 1 is purely subjective (opinionated).
-    
-    ### Limitations
-    As a demo tool, this scraper may not work on sites with heavy JavaScript protection (like X/Twitter or Bloomberg). In professional environments, an API like NewsAPI is recommended.
+    2. **Natural Language Processing (NLP):**
+       The extracted text is passed through `TextBlob`, an NLP library built on top of the famous NLTK framework. The model evaluates the lexicon (words) within the headline against a vast dataset of pre-scored words to calculate:
+       * **Polarity [-1.0 to 1.0]:** Evaluates the emotional direction. Words like "crash", "loss", and "terrible" drag the score down, while "innovative", "surge", and "win" push it up.
+       * **Subjectivity [0.0 to 1.0]:** Evaluates the amount of personal opinion or factual information. High subjectivity means the headline is highly opinionated.
+       
+    3. **Data Visualization:**
+       The numerical data is mapped into a Pandas DataFrame, which acts as the data foundation for `Plotly`. Plotly renders interactive, mathematically precise graphs that allow the user to visualize the overarching themes of the news portal at a glance.
+       
+    ### 🚧 Current Limitations & Future Scope
+    * **Dynamic Content Loading:** Many modern websites (like Twitter/X, Bloomberg, or heavily React-based apps) use Client-Side Rendering (CSR). Standard `Requests` cannot read this content because it requires a Javascript engine to run first. 
+    * **Paywalls:** The Article Reader feature relies on standard HTML paragraphs. If a site has a hard paywall, only the introductory text will be extracted.
+    * **Future Upgrades:** Future versions of this tool will implement Selenium for rendering JS, and utilize Large Language Models (LLMs) like OpenAI's GPT for deeper contextual summary rather than simple lexicon-based sentiment analysis.
     """)
+    
     st.divider()
-    st.caption(f"NewsPulse AI Engine v2.0 | System Time: {datetime.now().strftime('%H:%M:%S')}")
+    st.caption(f"NewsPulse AI Engine v2.5 | System Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Developed by Ravi Kumar Vishwakarma")
 
 # --- FOOTER ---
-st.markdown("<br><hr><p style='text-align: center; color: #94a3b8;'>Built for Insight • Driven by Data</p>", unsafe_allow_html=True)
+st.markdown("<br><hr><p style='text-align: center; color: #94a3b8; font-size: 0.9em;'>Built for Insight • Driven by Data • Empowered by AI</p>", unsafe_allow_html=True)
