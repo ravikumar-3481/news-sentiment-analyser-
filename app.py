@@ -15,10 +15,12 @@ st.set_page_config(
     page_title="NewsPulse AI | Advanced Sentiment Engine",
     page_icon="📡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # --- STATE MANAGEMENT ---
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "🏠 Home"
 if 'selected_article' not in st.session_state:
     st.session_state.selected_article = None
 if 'scraped_data' not in st.session_state:
@@ -139,15 +141,22 @@ def scrape_article_content(url):
 st.markdown("<h1 style='text-align: center; color: #1E3A8A; margin-bottom: 0;'>NewsPulse AI 📡</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: center; color: #64748b; font-size: 1.2em;'>Intelligence for the Modern Information Age</p>", unsafe_allow_html=True)
 
-# Using sidebar for simpler navigation state management
-st.sidebar.title("Navigation")
-pages = ["🏠 Home", "📊 Dashboard", "ℹ️ About"]
-selected_page = st.sidebar.radio("Go to:", pages)
+# Top navigation buttons
+def nav_to(page):
+    st.session_state.current_page = page
+
+nav1, nav2, nav3 = st.columns(3)
+with nav1:
+    st.button("🏠 Home", use_container_width=True, on_click=nav_to, args=("🏠 Home",))
+with nav2:
+    st.button("📊 Dashboard", use_container_width=True, on_click=nav_to, args=("📊 Dashboard",))
+with nav3:
+    st.button("ℹ️ About", use_container_width=True, on_click=nav_to, args=("ℹ️ About",))
 
 st.divider()
 
 # --- PAGE: HOME ---
-if selected_page == "🏠 Home":
+if st.session_state.current_page == "🏠 Home":
     st.session_state.selected_article = None # Reset article view
     
     col1, col2 = st.columns([1.6, 1])
@@ -212,7 +221,7 @@ if selected_page == "🏠 Home":
         st.link_button("🌐 Visit Portfolio Website", "https://yourportfolio.com/", use_container_width=True)
 
 # --- PAGE: DASHBOARD ---
-elif selected_page == "📊 Dashboard":
+elif st.session_state.current_page == "📊 Dashboard":
     
     # If an article is selected, show the Article Reader view
     if st.session_state.selected_article:
@@ -357,7 +366,7 @@ elif selected_page == "📊 Dashboard":
                             st.rerun()
 
 # --- PAGE: ABOUT ---
-elif selected_page == "ℹ️ About":
+elif st.session_state.current_page == "ℹ️ About":
     st.session_state.selected_article = None # Reset article view
     
     st.header("Project Documentation & Architecture")
