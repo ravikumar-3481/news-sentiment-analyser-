@@ -143,7 +143,7 @@ if selected_page == "🏠 Home":
         st.markdown("""
             <div class="dev-card">
                 <h2 style='margin-top:0;'>Developer Profile</h2>
-                <p><strong>Name:</strong> Gemini AI Developer</p>
+                <p><strong>Name:</strong> Ravi Kumar Vishwakarma</p>
                 <p><strong>Role:</strong> Full-Stack NLP Engineer</p>
                 <p><strong>Stack:</strong> Python, Streamlit, NLTK, BeautifulSoup</p>
                 <hr style='border-color: rgba(255,255,255,0.2)'>
@@ -170,7 +170,7 @@ elif selected_page == "📊 Dashboard":
     
     url_to_use = target_topic
     if target_topic == "Custom URL":
-        url_to_use = st.text_input("Enter Custom URL:", "https://news.ycombinator.com/")
+        url_to_use = st.text_input("Enter Custom URL:", placeholder = "Enter News Website Url")
     
     if st.button("🚀 Analyze Now"):
         headlines = scrape_news(url_to_use)
