@@ -252,17 +252,9 @@ elif st.session_state.current_page == "Dashboard":
         
         col_url, col_btn = st.columns([3, 1])
         with col_url:
-            target_topic = st.selectbox(
-                "Select a News Source or choose 'Custom URL':",
-                ["https://techcrunch.com/category/artificial-intelligence/", 
-                 "https://www.theverge.com/tech",
-                 "https://www.bbc.com/news/business",
-                 "Custom URL"]
-            )
-            
+            target_topic = st.text_input("Enter Custom News URL:", placeholder="https://www.newswebsite.com")
             url_to_use = target_topic
-            if target_topic == "Custom URL":
-                url_to_use = st.text_input("Enter Custom News URL:", placeholder="https://www.newswebsite.com")
+                
         
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
