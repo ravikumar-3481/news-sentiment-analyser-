@@ -20,7 +20,7 @@ st.set_page_config(
 
 # --- STATE MANAGEMENT ---
 if 'current_page' not in st.session_state:
-    st.session_state.current_page = "🏠 Home"
+    st.session_state.current_page = "Home"
 if 'selected_article' not in st.session_state:
     st.session_state.selected_article = None
 if 'scraped_data' not in st.session_state:
@@ -41,7 +41,7 @@ st.markdown("""
         transition: 0.3s ease-in-out;
         border: none;
     }
-    .stButton>button:hover { background-color: #3b82f6; transform: translateY(-2px); }
+    .stButton>button:hover { background-color: #3b82f6; transform: translateY(-5px); }
     .metric-card {
         background-color: white; padding: 20px;
         border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
@@ -147,39 +147,39 @@ def nav_to(page):
 
 nav1, nav2, nav3 = st.columns(3)
 with nav1:
-    st.button("🏠 Home", use_container_width=True, on_click=nav_to, args=("🏠 Home",))
+    st.button("Home", use_container_width=True, on_click=nav_to, args=("Home",))
 with nav2:
-    st.button("📊 Dashboard", use_container_width=True, on_click=nav_to, args=("📊 Dashboard",))
+    st.button("Dashboard", use_container_width=True, on_click=nav_to, args=("Dashboard",))
 with nav3:
-    st.button("ℹ️ About", use_container_width=True, on_click=nav_to, args=("ℹ️ About",))
+    st.button("About", use_container_width=True, on_click=nav_to, args=("About",))
 
 st.divider()
 
 # --- PAGE: HOME ---
-if st.session_state.current_page == "🏠 Home":
+if st.session_state.current_page == "Home":
     st.session_state.selected_article = None # Reset article view
     
     col1, col2 = st.columns([1.6, 1])
     
     with col1:
-        st.header("🚀 Project Overview")
+        st.header("Project Overview")
         st.write("""
         **NewsPulse AI** is an advanced NLP (Natural Language Processing) and web-scraping engine designed to decode the emotional undertone and bias of current events across the globe in real-time.
         """)
         
-        st.subheader("⚠️ Problem Statement")
+        st.subheader("Problem Statement")
         st.write("""
         In the modern digital age, we suffer from **Information Overload**. Thousands of news articles are published every minute, often loaded with clickbait, emotional manipulation, and inherent biases. It has become nearly impossible for an individual or investor to manually gauge the true, objective "mood" of the market or public opinion without being influenced by sensationalism.
         """)
         
-        st.subheader("💡 The Solution")
+        st.subheader("The Solution")
         st.write("""
         NewsPulse AI solves this by deploying automated scrapers that instantly aggregate headlines from any given news portal. It passes these headlines through a linguistic model to strip away the noise and quantify two critical metrics:
         1. **Polarity (Sentiment):** Is the news driving fear or optimism?
         2. **Subjectivity (Bias):** Is the news reporting hard facts, or pushing an opinion?
         """)
         
-        st.subheader("⚙️ Technologies Used")
+        st.subheader("Technologies Used")
         st.markdown("""
         * **Python:** Core backend programming language.
         * **Streamlit:** For building the interactive, reactive web application interface.
@@ -189,14 +189,14 @@ if st.session_state.current_page == "🏠 Home":
         * **Pandas:** For structuring, cleaning, and managing the scraped datasets.
         """)
         
-        st.subheader("🎯 Why is this Unique?")
+        st.subheader("Why is this Unique?")
         st.write("""
         Unlike static sentiment reports, NewsPulse AI allows users to input **Custom URLs** and get an on-the-fly analysis. It dynamically adjusts to any news site structure, generates instant interactive data visualizations, and acts as a transparent, bias-detection shield for the reader.
         """)
         
-        st.subheader("📖 How to Use")
+        st.subheader("How to Use")
         st.info("""
-        1. Navigate to the **📊 Dashboard** from the sidebar.
+        1. Navigate to the **Dashboard** from the Dashboard Button.
         2. Select a pre-configured news category or enter a Custom URL.
         3. Click **Analyze Now**.
         4. Explore the charts, or click on any headline to open the **Article Reader** and view the full content.
@@ -208,7 +208,7 @@ if st.session_state.current_page == "🏠 Home":
             <div class="dev-card">
                 <h2>👨‍💻 Developer Profile</h2>
                 <h3 style='color: white; margin-bottom: 5px;'>Ravi Kumar Vishwakarma</h3>
-                <p style='color: #94a3b8; font-size: 1.1em; margin-top: 0;'>Full-Stack NLP Engineer</p>
+                <p style='color: #94a3b8; font-size: 1.1em; margin-top: 0;'>Ai & Data Science Student</p>
                 <p>Passionate about turning unstructured web data into visual stories and building AI tools that empower users.</p>
                 <hr style='border-color: rgba(255,255,255,0.2); margin: 20px 0;'>
                 <p style='margin-bottom: 10px;'><strong>Connect with me:</strong></p>
@@ -216,12 +216,12 @@ if st.session_state.current_page == "🏠 Home":
         """, unsafe_allow_html=True)
         
         # Buttons outside HTML for Streamlit click handling
-        st.link_button("📂 View My GitHub", "https://github.com/", use_container_width=True)
-        st.link_button("💼 Connect on LinkedIn", "https://linkedin.com/", use_container_width=True)
-        st.link_button("🌐 Visit Portfolio Website", "https://yourportfolio.com/", use_container_width=True)
+        st.link_button("View My GitHub", "https://github.com/ravikumar-3481", use_container_width=True)
+        st.link_button("Connect on LinkedIn", "https://www.linkedin.com/in/ravi-vishwakarma67", use_container_width=True)
+        st.link_button("Visit Portfolio Website", "https://profileravi.netlify.app", use_container_width=True)
 
 # --- PAGE: DASHBOARD ---
-elif st.session_state.current_page == "📊 Dashboard":
+elif st.session_state.current_page == "Dashboard":
     
     # If an article is selected, show the Article Reader view
     if st.session_state.selected_article:
@@ -262,11 +262,11 @@ elif st.session_state.current_page == "📊 Dashboard":
             
             url_to_use = target_topic
             if target_topic == "Custom URL":
-                url_to_use = st.text_input("Enter Custom News URL:", placeholder="e.g., https://news.ycombinator.com/")
+                url_to_use = st.text_input("Enter Custom News URL:", placeholder="https://www.newswebsite.com")
         
         with col_btn:
             st.markdown("<br>", unsafe_allow_html=True)
-            analyze_clicked = st.button("🚀 Analyze Now")
+            analyze_clicked = st.button("Analyze Now")
 
         if analyze_clicked:
             with st.spinner("Initializing web scrapers & NLP models..."):
@@ -295,7 +295,7 @@ elif st.session_state.current_page == "📊 Dashboard":
         if st.session_state.scraped_data is not None:
             df = st.session_state.scraped_data
             
-            st.markdown("### 📈 Real-Time Intelligence")
+            st.markdown("### Real-Time Intelligence")
             
             # --- METRICS ROW ---
             m1, m2, m3, m4 = st.columns(4)
@@ -361,12 +361,12 @@ elif st.session_state.current_page == "📊 Dashboard":
                     
                     c1, c2 = st.columns([1, 4])
                     with c1:
-                        if st.button("📖 Read Article", key=f"read_{idx}"):
+                        if st.button("Read Article", key=f"read_{idx}"):
                             st.session_state.selected_article = row.to_dict()
                             st.rerun()
 
 # --- PAGE: ABOUT ---
-elif st.session_state.current_page == "ℹ️ About":
+elif st.session_state.current_page == "About":
     st.session_state.selected_article = None # Reset article view
     
     st.header("Project Documentation & Architecture")
